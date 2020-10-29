@@ -38,9 +38,17 @@ seneca
             done()
         }
 
+        const updatedList = _registryDict[name] == null
+            ? []
+            :  _registryDict[name].filter((service) => service.host !== host || service.port !== port)
+
         const updatedDict = {
             ..._registryDict,
-            [name]: _registryDict[name].filter((service) => service.host !== host || service.port !== port)
+            [name]: updatedList.length ? updatedList : null
+        }
+
+        if (!updatedList.length) {
+            delete updatedDict[name]
         }
 
         logger.info(`Teardown service "${name}" [${host}:${port}] from registry.`)
@@ -55,7 +63,7 @@ seneca
     .add('role:registry, cmd:add', async (msg, done) => {
         const { name, port, host } = msg
         const _registryDict = JSON.parse(await getRedisAsync(REDIS_REPO_KEY) || '{}')
-        if (!_registryDict.hasOwnProperty(name)) {
+        if (!_registryDict.hasOwnProperty(name) || _registryDict[name] == null) {
             _registryDict[name] = [{ port, host }]
         } else {
             _registryDict[name].push({ port, host })
@@ -70,7 +78,7 @@ seneca
         const { name } = msg
         const _registryDict = JSON.parse(await getRedisAsync(REDIS_REPO_KEY) || '{}')
 
-        if (!_registryDict.hasOwnProperty(name)) {
+        if (!_registryDict.hasOwnProperty(name) || _registryDict[name] == null) {
             logger.warn(`No such service "${name}" found in registry.`)
             done(null, {
                 hasService: false,

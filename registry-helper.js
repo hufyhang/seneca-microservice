@@ -5,11 +5,11 @@ const logger = log4js.getLogger()
 logger.level = 'info'
 
 const registerService = (senecaOption, name, port) => {
-  const { seneca, host: senecaHost = '127.0.0.1', port: senecaPort = 9988 } = senecaOption
-  logger.info(`Attempt to register service "${name}" [${address.ip()}:${port}] to registry[${senecaHost}]`)
+  const { seneca, registry: registryHost = '127.0.0.1', port: registryPort = 9988 } = senecaOption
+  logger.info(`Attempt to register service "${name}" [${address.ip()}:${port}] to registry[${registryHost}]`)
 
   const teardown = (callback) => {
-    seneca.client({ host: senecaHost, port: senecaPort, type: 'tcp' })
+    seneca.client({ host: registryHost, port: registryPort, type: 'tcp' })
       .act({
         role: 'registry',
         cmd: 'teardown',
@@ -29,7 +29,7 @@ const registerService = (senecaOption, name, port) => {
   })
 
   return (fn) => {
-    return seneca.client({ host: senecaHost, port: senecaPort, type: 'tcp' })
+    return seneca.client({ host: registryHost, port: registryPort, type: 'tcp' })
       .act({
         role: 'registry',
         cmd: 'add',
@@ -40,11 +40,11 @@ const registerService = (senecaOption, name, port) => {
   }
 }
 
-const lookupService = ({ host: senecaHost = '127.0.0.1', port: senecaPort = 9988 }, name) => {
+const lookupService = ({ registry: registryHost = '127.0.0.1', port: registryPort = 9988 }, name) => {
   return new Promise((resolve, reject) => {
-    logger.info(`Start to lookup service "${name}" in registry[${senecaHost}].`)
+    logger.info(`Start to lookup service "${name}" in registry[${registryHost}].`)
     const seneca = require('seneca')()
-    seneca.client({ host: senecaHost, port: senecaPort, type: 'tcp' }).act({
+    seneca.client({ host: registryHost, port: registryPort, type: 'tcp' }).act({
       role: 'registry',
       cmd: 'get',
       name
@@ -56,7 +56,7 @@ const lookupService = ({ host: senecaHost = '127.0.0.1', port: senecaPort = 9988
 
       const { hasService, host, port } = result
       if (!hasService) {
-        logger.info(`No services named "${name}" were found in registry[${senecaHost}].`)
+        logger.info(`No services named "${name}" were found in registry[${registryHost}].`)
         seneca.close()
         resolve({
           ...result,
@@ -65,7 +65,7 @@ const lookupService = ({ host: senecaHost = '127.0.0.1', port: senecaPort = 9988
         })
       }
 
-      logger.info(`Service "${name}", available @ ${host}:${port}, was found in registry[${senecaHost}].`)
+      logger.info(`Service "${name}", available @ ${host}:${port}, was found in registry[${registryHost}].`)
       const client = seneca.client({ host, port })
       const actAsync = (option) => {
         return new Promise((resolve, reject) => {
