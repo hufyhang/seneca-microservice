@@ -12,20 +12,20 @@ process.on('uncaughtException', (err) => {
 })
 
 const senecaWebConfig = {
-    context,
-    adapter: require('seneca-web-adapter-express'),
-    options: {
-        parseBody: false
-    }
+  context,
+  adapter: require('seneca-web-adapter-express'),
+  options: {
+    parseBody: false
+  }
 }
 
 const app = Express()
-    .use(require('body-parser').json({ limit: '2gb' }))
-    .use(context)
-    .listen(3030)
+  .use(require('body-parser').json({ limit: '2gb' }))
+  .use(context)
+  .listen(3030)
 
 const seneca = require('seneca')()
 
 seneca.use(SenecaWeb, senecaWebConfig)
-    .use('api')
+  .use('api')
 

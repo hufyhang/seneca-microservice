@@ -74,7 +74,7 @@ const lookupService = ({ registry: registryHost = '127.0.0.1', port: registryPor
           logger.info(`Act "${actString}" on ${name}[${host}:${port}]`)
           client.act(option, (err, result) => {
             if (err) {
-            logger.error(`Error occurred when acting "${actString}" on ${name}[${host}:${port}]. ${err}`)
+              logger.error(`Error occurred when acting "${actString}" on ${name}[${host}:${port}]. ${err}`)
               seneca.close()
               reject(err)
             }
