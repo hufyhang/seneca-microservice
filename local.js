@@ -10,7 +10,7 @@ const SERVICE_PORT = argv.port || 10102
 registerService({ seneca, registry: REGISTRY_HOST }, 'generic', SERVICE_PORT)((seneca) => {
 
     seneca.add('role:local, cmd: info', (msg, reply) => {
-        return reply({ message: `Hello, ${ msg.name }!你好，${msg.name}！` })
+        return reply(null, { message: `Hello, ${ msg.name }!你好，${msg.name}！` })
     }).listen({ port: SERVICE_PORT })
 
 })

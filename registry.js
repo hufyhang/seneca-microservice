@@ -1,3 +1,7 @@
+/**
+ * Redis-powered service registry for seneca micro-services.
+ */
+
 const log4js = require('log4js')
 const yargs = require('yargs')
 const Redis = require('redis')
@@ -16,82 +20,82 @@ const isLeader = argv.lead === true
 
 logger.level = 'info'
 
-let redis, getRedisAsync, setRedisAsync = null
+let redis, delRedisAsync, existsRedisAsync, sremRedisAsync, saddRedisAsync, scardRedisAsync, smembersRedisAsync = null
 
 if (typeof redisConfig === 'string') {
     const { promisify } = require('util')
     redis = Redis.createClient({ url: redisConfig })
-    getRedisAsync = promisify(redis.get).bind(redis)
-    setRedisAsync = promisify(redis.set).bind(redis)
+    existsRedisAsync = promisify(redis.exists).bind(redis)
+    sremRedisAsync = promisify(redis.srem).bind(redis)
+    saddRedisAsync = promisify(redis.sadd).bind(redis)
+    scardRedisAsync = promisify(redis.scard).bind(redis)
+    smembersRedisAsync = promisify(redis.smembers).bind(redis)
+    delRedisAsync = promisify(redis.del).bind(redis)
 
     redis.on('error', (err) => {
         logger.error(`Error occurred in Redis. ${ err }`)
     })
 }
 
+const makeRedisKeyName = (name) => `${REDIS_REPO_KEY}_$$${name}`
+
 seneca
     .add('role:registry, cmd:teardown', async (msg, done) => {
         const { name, port, host } = msg
-        const _registryDict = JSON.parse(await getRedisAsync(REDIS_REPO_KEY) || '{}')
-
-        if (!_registryDict.hasOwnProperty(name)) {
-            done()
-        }
-
-        const updatedList = _registryDict[name] == null
-            ? []
-            :  _registryDict[name].filter((service) => service.host !== host || service.port !== port)
-
-        const updatedDict = {
-            ..._registryDict,
-            [name]: updatedList.length ? updatedList : null
-        }
-
-        if (!updatedList.length) {
-            delete updatedDict[name]
+        const serviceRedisName = makeRedisKeyName(name)
+        const hasRegisteredService = await existsRedisAsync(serviceRedisName)
+        if (hasRegisteredService) {
+            await sremRedisAsync(serviceRedisName, JSON.stringify({ port, host }))
+            const length = await scardRedisAsync(serviceRedisName)
+            if (!length) {
+                await delRedisAsync(serviceRedisName)
+            }
         }
 
         logger.info(`Teardown service "${name}" [${host}:${port}] from registry.`)
-        await setRedisAsync(REDIS_REPO_KEY, JSON.stringify(updatedDict))
         done()
 
     })
-    .add('role:registry, cmd:list', (msg, done) => {
-        logger.info(`Listed all services in registry. ${JSON.stringify(_registryDict, null, '  ')}`)
-        done(null, { ..._registryDict })
-    })
     .add('role:registry, cmd:add', async (msg, done) => {
         const { name, port, host } = msg
-        const _registryDict = JSON.parse(await getRedisAsync(REDIS_REPO_KEY) || '{}')
-        if (!_registryDict.hasOwnProperty(name) || _registryDict[name] == null) {
-            _registryDict[name] = [{ port, host }]
-        } else {
-            _registryDict[name].push({ port, host })
-        }
+        const serviceRedisName = makeRedisKeyName(name)
+        await saddRedisAsync(serviceRedisName, JSON.stringify({ port, host }))
+        const length = await scardRedisAsync(serviceRedisName)
 
-        await setRedisAsync(REDIS_REPO_KEY, JSON.stringify(_registryDict))
-
-        logger.info(`Added ${name}[${host}:${port}][Total #: ${_registryDict[name].length}] to registry.`)
+        logger.info(`Added ${name}[${host}:${port}] [Total #: ${length}] to registry.`)
         done()
     })
     .add('role:registry, cmd:get', async (msg, done) => {
         const { name } = msg
-        const _registryDict = JSON.parse(await getRedisAsync(REDIS_REPO_KEY) || '{}')
-
-        if (!_registryDict.hasOwnProperty(name) || _registryDict[name] == null) {
+        const serviceRedisName = makeRedisKeyName(name)
+        const hasRegisteredService = await existsRedisAsync(serviceRedisName)
+        if (!hasRegisteredService) {
             logger.warn(`No such service "${name}" found in registry.`)
-            done(null, {
+            return done(null, {
                 hasService: false,
                 name: undefined,
                 port: undefined,
                 host: undefined
             })
         }
-        const serviceList = _registryDict[name]
+
+        const length = await scardRedisAsync(serviceRedisName)
+        if (!length) {
+            logger.warn(`No such service "${name}" found in registry.`)
+            return done(null, {
+                hasService: false,
+                name: undefined,
+                port: undefined,
+                host: undefined
+            })
+        }
+
+        const serviceList = await smembersRedisAsync(serviceRedisName)
+        console.log('SERVICES', serviceList)
         const balancer = new P2cBalancer(serviceList.length)
         const service = serviceList[balancer.pick()]
 
-        const { host, port } = service
+        const { host, port } = JSON.parse(service)
         logger.info(`Retrieved ${name}[${host}:${port}] from registry.`)
         done(null, {
             hasService: true,
